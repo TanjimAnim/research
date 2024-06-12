@@ -4,6 +4,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, f1_score
 from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
 import joblib
 
 # Load your dataset
@@ -22,9 +23,13 @@ x = data[
 ]
 y = data["Outcome"]
 
+# Impute missing values with the mean
+imputer = SimpleImputer(strategy="mean")
+x_imputed = imputer.fit_transform(x)
+
 # Standardize the features
 scaler = StandardScaler()
-x_scaled = pd.DataFrame(scaler.fit_transform(x), columns=x.columns)
+x_scaled = scaler.fit_transform(x_imputed)
 
 # Split the data
 X_train, X_test, y_train, y_test = train_test_split(
@@ -81,8 +86,9 @@ f1 = f1_score(y_test, y_pred)
 
 print(f"Accuracy: {accuracy}")
 print(f"ROC AUC: {roc_auc}")
-print(f"PRECISION: {precision}")
-print(f"f1_Score:{f1}")
+print(f"Precision: {precision}")
+print(f"F1 Score: {f1}")
+
 
 # Now, load your clinical data which doesn't have an outcome
 clinical_data = pd.read_excel("Diabetes (1).xlsx", sheet_name="response")
@@ -111,4 +117,4 @@ clinical_data["PredictedOutcome"] = clinical_outcome_pred
 clinical_data["PredictedProbability"] = clinical_outcome_pred_prob
 
 # Save the predictions
-clinical_data.to_csv("clinicalData_with_predictions.csv", index=False)
+# clinical_data.to_csv("clinicalData_with_predictions.csv", index=False)
