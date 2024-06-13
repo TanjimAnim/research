@@ -1,20 +1,28 @@
-import pandas as pd
-import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, f1_score
-from sklearn.preprocessing import StandardScaler
-from sklearn.impute import SimpleImputer
 import joblib
-import shap
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import (
+    ConfusionMatrixDisplay,
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    roc_auc_score,
+    roc_curve,
+)
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.preprocessing import StandardScaler
 
-# Load your dataset
-data = pd.read_csv("pimaTesting.csv")
 
-# Preprocess your data
-x = data[
-    [
+def load_data(filepath):
+    return pd.read_csv(filepath)
+
+
+def preprocess_data(data, imputer=None, scaler=None, fit=False):
+    features = [
         "Glucose",
         "BloodPressure",
         "BMI",
@@ -22,157 +30,168 @@ x = data[
         "Age",
         "Pregnancies",
     ]
-]
-y = data["Outcome"]
+    X = data[features]
 
-# Impute missing values with the mean and keep as DataFrame
-imputer = SimpleImputer(strategy="mean")
-x_imputed = pd.DataFrame(imputer.fit_transform(x), columns=x.columns)
-
-# Standardize the features and keep as DataFrame
-scaler = StandardScaler()
-x_scaled = pd.DataFrame(scaler.fit_transform(x_imputed), columns=x_imputed.columns)
-
-# Split the data while keeping them as DataFrames
-X_train, X_test, y_train, y_test = train_test_split(
-    x_scaled,
-    y,
-    test_size=0.2,
-    random_state=42,
-)
-
-# Initialize the model with default parameters
-rf_model = RandomForestClassifier(random_state=42, criterion="entropy")
-
-# Hyperparameter tuning using GridSearchCV
-param_grid = {
-    "n_estimators": [100, 200, 300, 400],
-    "max_depth": [None, 10, 20, 30],
-    "min_samples_split": [2, 5, 10],
-    "min_samples_leaf": [1, 2, 4],
-    "bootstrap": [True, False],
-}
-
-grid_search = GridSearchCV(
-    estimator=rf_model,
-    param_grid=param_grid,
-    cv=5,
-    n_jobs=-1,
-    scoring="roc_auc",
-    verbose=2,
-)
-grid_search.fit(X_train, y_train)
-
-# Best parameters from GridSearchCV
-best_params = grid_search.best_params_
-print(f"Best parameters: {best_params}")
-
-# Train the model with the best parameters
-best_rf_model = grid_search.best_estimator_
-
-# Save the model to a file
-joblib.dump(best_rf_model, "best_rf_model.pkl")
-
-# Load the model from the file
-# best_rf_model = joblib.load('best_rf_model.pkl')
-
-# Make predictions
-y_pred = best_rf_model.predict(X_test)
-y_pred_prob = best_rf_model.predict_proba(X_test)[:, 1]
-
-# Evaluate the model
-accuracy = accuracy_score(y_test, y_pred)
-roc_auc = roc_auc_score(y_test, y_pred_prob)
-precision = precision_score(y_test, y_pred)
-f1 = f1_score(y_test, y_pred)
-
-print(f"Accuracy: {accuracy}")
-print(f"ROC AUC: {roc_auc}")
-print(f"Precision: {precision}")
-print(f"F1 Score: {f1}")
-
-# SHAP explanation
-explainer = shap.Explainer(best_rf_model, X_train)
-# shap_values = explainer(X_test, check_additivity=False)  # Disable additivity check
-
-# # Ensure X_test is a DataFrame
-# if not isinstance(X_test, pd.DataFrame):
-#     X_test = pd.DataFrame(X_test, columns=x.columns)
-
-# # Manually specify feature names
-# feature_names = X_test.columns
-
-# # Visualizations
-# shap.summary_plot(shap_values, X_test, feature_names=feature_names)
-# shap.dependence_plot("Glucose", shap_values, X_test)
-
-# # Force plot for a single prediction
-# shap.force_plot(explainer.expected_value[1], shap_values[0], X_test.iloc[0])
+    if fit:
+        imputer = SimpleImputer(strategy="mean")
+        scaler = StandardScaler()
+        X_imputed = pd.DataFrame(imputer.fit_transform(X), columns=features)
+        X_scaled = pd.DataFrame(scaler.fit_transform(X_imputed), columns=features)
+        return X_scaled, imputer, scaler
+    else:
+        X_imputed = pd.DataFrame(imputer.transform(X), columns=features)
+        X_scaled = pd.DataFrame(scaler.transform(X_imputed), columns=features)
+        return X_scaled
 
 
-# Now, load your clinical data which doesn't have an outcome
-clinical_data = pd.read_excel("Diabetes (1).xlsx", sheet_name="response")
+def split_data(X, y, test_size=0.2, random_state=42):
+    return train_test_split(X, y, test_size=test_size, random_state=random_state)
 
-# Ensure clinical_data has the same features
-clinical_features = clinical_data[
-    [
-        "Glucose",
-        "BloodPressure",
-        "BMI",
-        "DiabetesPedigreeFunction",
-        "Age",
-        "Pregnancies",
+
+def train_model(X_train, y_train):
+    rf_model = RandomForestClassifier(random_state=42, criterion="entropy")
+    param_grid = {
+        "n_estimators": [100, 200, 300, 400],
+        "max_depth": [None, 10, 20, 30],
+        "min_samples_split": [2, 5, 10],
+        "min_samples_leaf": [1, 2, 4],
+        "bootstrap": [True, False],
+    }
+    grid_search = GridSearchCV(
+        estimator=rf_model,
+        param_grid=param_grid,
+        cv=5,
+        n_jobs=-1,
+        scoring="roc_auc",
+        verbose=2,
+    )
+    grid_search.fit(X_train, y_train)
+    return grid_search.best_estimator_
+
+
+def save_model(model, filepath):
+    joblib.dump(model, filepath)
+
+
+def load_model(filepath):
+    return joblib.load(filepath)
+
+
+def evaluate_model(model, X_test, y_test):
+    y_pred = model.predict(X_test)
+    y_pred_prob = model.predict_proba(X_test)[:, 1]
+    metrics = {
+        "accuracy": accuracy_score(y_test, y_pred),
+        "roc_auc": roc_auc_score(y_test, y_pred_prob),
+        "precision": precision_score(y_test, y_pred),
+        "f1": f1_score(y_test, y_pred),
+    }
+    return y_pred, y_pred_prob, metrics
+
+
+def plot_roc_auc(y_test, y_pred_prob, title="ROC AUC Curve"):
+    fpr, tpr, _ = roc_curve(y_test, y_pred_prob)
+    roc_auc = roc_auc_score(y_test, y_pred_prob)
+    plt.figure()
+    plt.plot(
+        fpr, tpr, color="darkorange", lw=2, label=f"ROC curve (area = {roc_auc:.2f})"
+    )
+    plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title(title)
+    plt.legend(loc="lower right")
+    plt.show()
+
+
+def plot_confusion_matrix(y_test, y_pred, title="Confusion Matrix"):
+    conf_matrix = confusion_matrix(y_test, y_pred)
+    disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix)
+    disp.plot()
+    plt.title(title)
+    plt.show()
+
+
+def plot_feature_importance(model, features, title="Feature Importances"):
+    importances = model.feature_importances_
+    indices = np.argsort(importances)[::-1]
+    plt.figure()
+    plt.title(title)
+    plt.bar(range(len(features)), importances[indices], align="center")
+    plt.xticks(range(len(features)), [features[i] for i in indices], rotation=90)
+    plt.xlim([-1, len(features)])
+    plt.show()
+
+
+def main():
+    # Load dataset
+    data = load_data("pimaTesting.csv")
+    y = data["Outcome"]
+
+    # Preprocess data
+    X, imputer, scaler = preprocess_data(data, fit=True)
+
+    # Split data
+    X_train, X_test, y_train, y_test = split_data(X, y)
+
+    # Train model
+    best_rf_model = train_model(X_train, y_train)
+
+    # Save the model
+    save_model(best_rf_model, "best_rf_model.pkl")
+
+    # Load the model (optional)
+    # best_rf_model = load_model('best_rf_model.pkl')
+
+    # Evaluate the model
+    y_pred, y_pred_prob, metrics = evaluate_model(best_rf_model, X_test, y_test)
+    print(metrics)
+
+    # Plot ROC AUC curve
+    plot_roc_auc(y_test, y_pred_prob, title="ROC AUC Curve (Test Data)")
+
+    # Plot confusion matrix
+    plot_confusion_matrix(y_test, y_pred, title="Confusion Matrix (Test Data)")
+
+    # Plot feature importance
+    plot_feature_importance(best_rf_model, X.columns)
+
+    # Load and preprocess clinical data
+    clinical_data = pd.read_excel("Diabetes (1).xlsx", sheet_name="response")
+    clinical_features_scaled = preprocess_data(clinical_data, imputer, scaler)
+
+    # Predict outcomes for clinical data
+    clinical_outcome_pred = best_rf_model.predict(clinical_features_scaled)
+    clinical_outcome_pred_prob = best_rf_model.predict_proba(clinical_features_scaled)[
+        :, 1
     ]
-]
+    clinical_data["PredictedOutcome"] = clinical_outcome_pred
+    clinical_data["PredictedProbability"] = clinical_outcome_pred_prob
 
-# Preprocess clinical data the same way as training data
-clinical_features_imputed = pd.DataFrame(
-    imputer.transform(clinical_features), columns=clinical_features.columns
-)
-clinical_features_scaled = pd.DataFrame(
-    scaler.transform(clinical_features_imputed),
-    columns=clinical_features_imputed.columns,
-)
+    print(f"clinical_outcome_pred:{clinical_outcome_pred}")
+    print(f"clinical_outcome_pred_prob:{clinical_outcome_pred_prob}")
 
-# Predict the outcomes for the clinical data
-clinical_outcome_pred = best_rf_model.predict(clinical_features)
-clinical_outcome_pred_prob = best_rf_model.predict_proba(clinical_features)[:, 1]
+    # Plot ROC AUC curve for clinical data
+    plot_roc_auc(
+        clinical_data["PredictedOutcome"],
+        clinical_data["PredictedProbability"],
+        title="ROC AUC Curve (Clinical Data)",
+    )
 
-print(f"clinical_outcome_pred:{clinical_outcome_pred}")
-print(f"clinical_outcome_pred_prob:{clinical_outcome_pred_prob}")
+    # Plot confusion matrix for clinical data
+    plot_confusion_matrix(
+        clinical_data["PredictedOutcome"],
+        clinical_data["PredictedOutcome"],
+        title="Confusion Matrix (Clinical Data)",
+    )
 
-# Add predictions to clinical data
-clinical_data["PredictedOutcome"] = clinical_outcome_pred
-clinical_data["PredictedProbability"] = clinical_outcome_pred_prob
-
-# Save the predictions
-# clinical_data.to_csv("clinicalData_with_predictions.csv", index=False)
+    # Feature importance for clinical data (reuse from training data)
+    plot_feature_importance(
+        best_rf_model, X.columns, title="Feature Importances (Clinical Data)"
+    )
 
 
-# Add predictions to clinical data
-clinical_data["PredictedOutcome"] = clinical_outcome_pred
-clinical_data["PredictedProbability"] = clinical_outcome_pred_prob
-
-# Generate SHAP values for the clinical data
-clinical_shap_values = explainer(clinical_features_scaled, check_additivity=False)
-
-# Visualize SHAP values for clinical data
-shap.summary_plot(
-    clinical_shap_values,
-    clinical_features_scaled,
-    feature_names=clinical_features.columns,
-    plot_size=10,
-    max_display=6,
-)
-shap.dependence_plot(
-    "Glucose",
-    clinical_shap_values,
-    clinical_features_scaled,
-)
-
-# Optionally, visualize SHAP values for a specific prediction
-shap.force_plot(
-    explainer.expected_value[1],
-    clinical_shap_values[0],
-    clinical_features_scaled.iloc[0],
-)
+if __name__ == "__main__":
+    main()
